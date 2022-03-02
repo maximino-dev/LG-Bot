@@ -549,19 +549,13 @@ class LGBot(commands.Bot):
 		votes = {}
 
 		def check(reaction, user):
-			if str(reaction.emoji) in emojis[:self.game.n_members] and user.name not in voted:
+			if str(reaction.emoji) in emojis[:self.game.n_members] and user.name not in voted and user.name != "LG":
 				index = emojis.index(reaction.emoji)
 				if self.game.members[index] not in votes.keys():
 					votes[self.game.members[index]] = 1
 				else:
 					votes[self.game.members[index]] += 1
 				voted.append(user.name)
-
-				# TODO: Issue found, when this vote function is called recursively,
-				# The user "LG" (the bot's name) adds reaction to the message and he is in the voted list
-				# So we remove it, it's maybe a synchronisation problem
-				if "LG" in voted:
-					voted.remove("LG")
 
 				if len(voted) == len(self.game.members):
 					return True
