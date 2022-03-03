@@ -2,7 +2,7 @@ class Game():
 
     def __init__(self):
         self._cards = ["loup", "villageois", "cupidon",
-                       "voyante", "petite-fille", "sorciere"]
+                       "voyante", "petite-fille", "sorciere", "chasseur"]
 
         # List of members of the party (Discord.Member objects)
         self._members = []

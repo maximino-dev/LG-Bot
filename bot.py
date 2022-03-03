@@ -98,7 +98,7 @@ class LGBot(commands.Bot):
 		@self.command(name="stop")
 		async def _stop(ctx: discord.Client):
 			"""
-				Disconnect the bot from a voice channel, and deletes all the channels created
+				Disconnect the bot from a voice channel, and delete all created channels
 			"""
 			if not ctx.voice_client or not ctx.voice_client.is_connected():
 				return await ctx.send("Je ne suis connecté à aucun salon...")
@@ -163,11 +163,11 @@ class LGBot(commands.Bot):
 			# If theres only one player or less, the game is finished
 			if self.game.n_members <= 1:
 				if self.game.n_members == 0:
-					await self._send_context("La partie est finie !\n Personne n'a gagné... C'etait un bon bain de sang", "LG")
+					await self._send_context("La partie est finie !\n Personne n'a gagné... C'etait un bon bain de sang", "FIN")
 				elif "loup" in self.game.roles.values():
-					await self._send_context("La partie est finie !\n Les loups-garous ont gagné", "LG")
+					await self._send_context("La partie est finie !\n Les loups-garous ont gagné", "FIN")
 				else:
-					await self._send_context("La partie est finie !\n Les villageois ont gagné", "LG")
+					await self._send_context("La partie est finie !\n Les villageois ont gagné", "FIN")
 				for member in ctx.author.voice.channel.members:
 					await member.edit(mute=False)
 				return
@@ -178,9 +178,9 @@ class LGBot(commands.Bot):
 			self.game.current_victim = None
 
 		if "loup" in self.game.roles.values():
-			await self._send_context("La partie est finie !\n Les loups-garous ont gagné", "LG")
+			await self._send_context("La partie est finie !\n Les loups-garous ont gagné", "FIN")
 		else:
-			await self._send_context("La partie est finie !\n Les villageois ont gagné", "LG")
+			await self._send_context("La partie est finie !\n Les villageois ont gagné", "FIN")
 		for member in ctx.author.voice.channel.members:
 			await member.edit(mute=False)
 
@@ -216,7 +216,7 @@ class LGBot(commands.Bot):
 				description=f"Combien de roles <{card}> voulez-vous ?",colour=discord.Colour.red())
 			message = await ctx.send(embed=embed)
 
-			if card in ["cupidon", "petite-fille", "voyante", "sorciere"]:
+			if card in ["cupidon", "petite-fille", "voyante", "sorciere", "chasseur"]:
 				await message.add_reaction(emojis[0])
 				await message.add_reaction(emojis[1])
 			elif card == "loup":
@@ -227,7 +227,7 @@ class LGBot(commands.Bot):
 					await message.add_reaction(emojis[i])
 
 			try:
-				reaction, user = await self.wait_for("reaction_add", check=check, timeout=30)
+				reaction, user = await self.wait_for("reaction_add", check=check, timeout=120)
 			except asyncio.TimeoutError:
 				await message.delete()
 				await ctx.send("Timed out")
@@ -285,7 +285,54 @@ class LGBot(commands.Bot):
 		return None
 
 	async def _kill(self, member):
-		""" Removes a member from the game by calling the remove_member method from the Game object """
+		""" 
+			Removes a member from the game by calling the remove_member method from the Game object,
+			If this member has the role <chasseur>, he can kill someone before dying
+		"""
+		# We test if the member is a hunter (chasseur)
+		if self.game.roles[member] == "chasseur":
+			msg = ""
+			i = 0
+			member_index = 0
+			for m in self.game.members:
+				if m == member:
+					member_index = i
+					continue
+				msg += str(i) + ". " + m.name + "\n"
+				i += 1
+	
+			emojis = ["0️⃣","1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟"]
+
+			message = await self._send_context(f"{member.name}, étant chasseur, peut tuer quelqu'un avant de mourir !\
+				\nChoisis ta victime parmi cette liste:\n" + msg,
+				"Dernière chance")
+
+			for i in range(self.game.n_members - 1):
+				await message.add_reaction(emojis[i])
+
+			def check(reaction, user):
+				return str(reaction.emoji) in emojis and user.name == member.name
+
+			reaction, user = await self.wait_for("reaction_add", check=check)
+
+			index = emojis.index(reaction.emoji)
+			if index >= member_index:
+				index += 1
+			target = self.game.members[index]
+
+			await self._send_context(f"{target.name} est mort(e), cette personne était... {self.game.roles[target]} !", "Journée")
+
+			if target in self.game.couple:
+				self.game.couple.remove(target)
+				couple = self.game.couple[0]
+				await self._send_context(f"{target.name} était en couple avec {couple}...\n "\
+					f"{couple} avec le role {self.game.roles[couple]} meurt donc de chagrin", "Journée")
+				self.game.remove_member(couple)
+				await couple.edit(mute=True)
+
+			self.game.remove_member(target)
+			await target.edit(mute=True)
+
 		self.game.remove_member(member)
 		await member.edit(mute=True)
 
@@ -342,7 +389,7 @@ class LGBot(commands.Bot):
 				voyante = member
 				v_index = i
 			else:
-				msg = msg + str(i) + ". " + member.name + "\n\t"
+				msg = msg + str(i) + ". " + member.name + "\n"
 				i += 1
 	
 		emojis = ["0️⃣","1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣"]
@@ -586,7 +633,7 @@ class LGBot(commands.Bot):
 			if victim in self.game.couple:
 				self.game.couple.remove(victim)
 				couple = self.game.couple[0]
-				await self._send_context(f"{couple} était en couple avec {victim.name}...\n "\
+				await self._send_context(f"{victim.name} était en couple avec {couple}...\n "\
 					f"{couple} avec le role {self.game.roles[couple]} meurt donc de chagrin")
 				await self._kill(couple)
 			await self._kill(victim)
@@ -600,11 +647,11 @@ class LGBot(commands.Bot):
 			await self._send_context(f"Personne n'est mort", "Journée")
 		else:
 			for victim in self.game.daily_victims:
-				await self._send_context(f"{victim.name} est mort\n Cette personne était {self.game.roles[victim]}", "Journée")
+				await self._send_context(f"{victim.name} est mort(e)\n Cette personne était {self.game.roles[victim]}", "Journée")
 				if victim in self.game.couple:
 					self.game.couple.remove(victim)
 					couple = self.game.couple[0]
-					await self._send_context(f"{couple} était en couple avec {victim.name}...\n "\
+					await self._send_context(f"{victim.name} était en couple avec {couple}...\n "\
 						f"{couple} avec le role {self.game.roles[couple]} meurt donc de chagrin", "Journée")
 					await self._kill(couple)
 				await self._kill(victim)
